@@ -1,15 +1,29 @@
-from utils import  ProxyFile
-
-ruta_archivo = "C:\\Users\\desarrollo\\Dropbox\\Reportes SAP\\stock de inventario"
-stockInventario = ProxyFile(ruta= ruta_archivo, nombre_archivo="stock de inventario", fecha_archivo="", file_conn=None)
-ruta_destino = r"C:\Users\desarrollo\Downloads"
+from utils import *
+import datetime
 
 
-stockInventario.open()
-stockInventario.update()
-stockInventario.relocate()
-stockInventario.close()
+ruta_origen_dropbox = r"C:\Users\desarrollo.RLPHARMA\Dropbox\Reportes SAP\Cartera de cliente\_BASES\Cartera_de_cliente.xlsx"
+ruta_origen_local = r"\\principalsql\RLPharma\CARTERA\Gestion De Cartera\Cartera Actualizada\Cartera_de_cliente.xlsx"
 
-if __name__ == "__main__":
-    import win32com.client
-    print(win32com.client)
+
+file_dropbox = ProxyFile(ruta=ruta_origen_dropbox, nombre_archivo="Cartera_de_cliente", fecha_archivo="", file_conn=None, destino =r"C:\Users\desarrollo.RLPHARMA\Dropbox\Reportes SAP\Cartera de cliente")
+file_local = ProxyFile(ruta=ruta_origen_local, nombre_archivo="Cartera_de_cliente", fecha_archivo="", file_conn=None, destino= r"\\principalsql\RLPharma\CARTERA\Gestion De Cartera\Cartera Actualizada")
+
+file_list = [file_dropbox, file_local]
+
+
+
+
+while True:
+    time = datetime.datetime.now().time().strftime("%H:%M")
+
+    if time == "10:22" :
+        for f in file_list:
+            f.open()
+            f.update()
+            f.relocate(f.destino)  # Se pasa la ruta de destino como argumento
+            f.close()
+        time.sleep(50)
+
+
+
