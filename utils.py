@@ -5,6 +5,7 @@ import os
 import win32com.client as win32
 import pythoncom  # Módulo para manejar errores COM
 
+
 import logging
 
 # Configuración del log
@@ -29,13 +30,15 @@ class IFileConn(ABC):
 
 
 class ProxyFile(IFileConn):
-    def __init__(self, ruta, nombre_archivo, fecha_archivo, file_conn=None, destino=None):
+    def __init__(self, ruta, nombre_archivo, fecha_archivo, is_for_update, time_to_update,file_conn=None, destino=None ):
         self.ruta = ruta
         self.nombre_archivo = nombre_archivo
         self.fecha_archivo = fecha_archivo
         self.destino =  destino
         self.file_conn = None  # Se inicializa en None
         self.excel_app = None  # Variable para almacenar la aplicación de Excel
+        self.is_for_update = is_for_update
+        self.time_to_update= time_to_update
 
 
 
@@ -73,6 +76,7 @@ class ProxyFile(IFileConn):
 
     def update(self):
         """Actualiza los datos del archivo de Excel."""
+
         try:
             self.file_conn.RefreshAll()  # Refresca todas las conexiones de datos
             time.sleep(50)  # Espera para asegurar que se actualice
