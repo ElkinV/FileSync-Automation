@@ -45,7 +45,7 @@ class ProxyFile(IFileConn):
     def connect(self):
         """Abre el archivo de Excel y lo conecta a la aplicación."""
         self.excel_app = win32.Dispatch("Excel.Application")
-        #self.excel_app.Visible = False  # Mantener Excel en segundo plano
+        self.excel_app.Visible = True  # Mantener Excel en segundo plano
         self.file_conn = self.excel_app.Workbooks.Open(self.ruta)
 
 
@@ -64,8 +64,8 @@ class ProxyFile(IFileConn):
             logging.info(f"Error al cerrar Excel: {e}")
 
     def open(self):
-        print("Archivo abierto.")
-        logging.info(f"Archivo abierto.")
+        print(f"Archivo abierto: {self.nombre_archivo}")
+        logging.info(f"Archivo abierto: {self.nombre_archivo}")
         self.connect()
 
     def close(self):
@@ -75,12 +75,19 @@ class ProxyFile(IFileConn):
         self.disconnect()
 
     def update(self):
-        """Actualiza los datos del archivo de Excel."""
+
 
         try:
-            self.file_conn.RefreshAll()  # Refresca todas las conexiones de datos
-            time.sleep(50)  # Espera para asegurar que se actualice
+            logging.info(f"Actualizando {self.nombre_archivo}")
+            print(f"Actualizando {self.nombre_archivo}")
+            print(self.file_conn.RefreshAll())
+
+
+            time.sleep(50)
+
+            logging.info(f"Guardando {self.nombre_archivo}")
             self.file_conn.Save()  # Guarda los cambios
+
         except pythoncom.com_error as e:
             print(f"Error al actualizar el archivo: {e}")
             logging.info(f"Error al actualizar el archivo: {e}")
@@ -88,7 +95,7 @@ class ProxyFile(IFileConn):
     def relocate(self, newpath):
         """Guarda una copia del archivo actualizado en otra ubicación."""
         try:
-            fecha_hoy = datetime.datetime.now().strftime("%d%m%Y")
+            fecha_hoy = datetime.datetime.now().strftime("%Y%m%d")
             nombre_nuevo = f"Cartera_{fecha_hoy}.xlsx"
             ruta_destino = os.path.join(newpath, nombre_nuevo)
 
