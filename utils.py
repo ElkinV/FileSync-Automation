@@ -3,23 +3,23 @@ from abc import ABC, abstractmethod
 import datetime
 import os
 import win32com.client as win32
-import pythoncom  # Módulo para manejar errores COM
-
-
+import pythoncom
 import logging
+from config import LOG_SETTINGS, RETRY_SETTINGS
 
-# Configuración del log
-log_file = "procesos.log"
+# Configure logging
 logging.basicConfig(
-    filename=log_file,
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S"
+    filename=LOG_SETTINGS['log_file'],
+    level=getattr(logging, LOG_SETTINGS['log_level']),
+    format=LOG_SETTINGS['log_format'],
+    datefmt=LOG_SETTINGS['date_format']
 )
 
+class FileOperationError(Exception):
+    """Custom exception for file operations"""
+    pass
 
 class IFileConn(ABC):
-
     @abstractmethod
     def connect(self):
         pass
@@ -28,83 +28,99 @@ class IFileConn(ABC):
     def disconnect(self):
         pass
 
-
 class ProxyFile(IFileConn):
-    def __init__(self, ruta, nombre_archivo, fecha_archivo, is_for_update, time_to_update,file_conn=None, destino=None ):
+    def __init__(self, ruta, nombre_archivo, fecha_archivo, is_for_relocate, time_to_update, file_conn=None, destino=None):
         self.ruta = ruta
         self.nombre_archivo = nombre_archivo
         self.fecha_archivo = fecha_archivo
-        self.destino =  destino
-        self.file_conn = None  # Se inicializa en None
-        self.excel_app = None  # Variable para almacenar la aplicación de Excel
-        self.is_for_update = is_for_update
-        self.time_to_update= time_to_update
+        self.destino = destino
+        self.file_conn = None
+        self.excel_app = None
+        self.is_for_relocate = is_for_relocate
+        self.time_to_update = time_to_update
+        self.retry_count = 0
 
-
+    def validate_path(self):
+        """Validate if the file path exists"""
+        print(self.ruta)
+        if not os.path.exists(self.ruta):
+            raise FileOperationError(f"File not found: {self.ruta}")
+        if self.destino and not os.path.exists(self.destino):
+            raise FileOperationError(f"Destination directory not found: {self.destino}")
 
     def connect(self):
-        """Abre el archivo de Excel y lo conecta a la aplicación."""
-        self.excel_app = win32.Dispatch("Excel.Application")
-        self.excel_app.Visible = True  # Mantener Excel en segundo plano
-        self.file_conn = self.excel_app.Workbooks.Open(self.ruta)
-
+        """Open Excel file and connect to application with retry logic"""
+        try:
+            self.validate_path()
+            self.excel_app = win32.Dispatch("Excel.Application")
+            self.excel_app.Visible = True
+            self.file_conn = self.excel_app.Workbooks.Open(self.ruta)
+            self.retry_count = 0  # Reset retry count on successful connection
+        except Exception as e:
+            self.retry_count += 1
+            if self.retry_count >= RETRY_SETTINGS['max_retries']:
+                raise FileOperationError(f"Failed to connect after {RETRY_SETTINGS['max_retries']} attempts: {str(e)}")
+            logging.warning(f"Connection attempt {self.retry_count} failed: {str(e)}")
+            time.sleep(RETRY_SETTINGS['retry_delay'])
+            self.connect()  # Retry connection
 
     def disconnect(self):
-        """Cierra el archivo y la aplicación de Excel de forma segura."""
+        """Safely close file and Excel application"""
         try:
             if self.file_conn:
-                self.file_conn.Close(SaveChanges=False)  # Cierra sin guardar cambios
-                self.file_conn = None  # Se libera la referencia
+                self.file_conn.Close(SaveChanges=False)
+                self.file_conn = None
 
             if self.excel_app:
-                self.excel_app.Quit()  # Cierra Excel
-                self.excel_app = None  # Se libera la referencia
+                self.excel_app.Quit()
+                self.excel_app = None
         except pythoncom.com_error as e:
-            print(f"Error al cerrar Excel: {e}")
-            logging.info(f"Error al cerrar Excel: {e}")
+            logging.error(f"Error closing Excel: {e}")
+            raise FileOperationError(f"Error closing Excel: {e}")
 
     def open(self):
-        print(f"Archivo abierto: {self.nombre_archivo}")
-        logging.info(f"Archivo abierto: {self.nombre_archivo}")
-        self.connect()
+        """Open file with logging"""
+        try:
+            logging.info(f"Opening file: {self.nombre_archivo}")
+            self.connect()
+        except Exception as e:
+            logging.error(f"Error opening file {self.nombre_archivo}: {str(e)}")
+            raise
 
     def close(self):
-        """Cierra la conexión al archivo de Excel."""
-        print("Proceso Exitoso")
-        logging.info(f"Proceso Exitoso")
-        self.disconnect()
+        """Close file connection with logging"""
+        try:
+            logging.info(f"Closing file: {self.nombre_archivo}")
+            self.disconnect()
+            logging.info(f"Successfully closed: {self.nombre_archivo}")
+        except Exception as e:
+            logging.error(f"Error closing file {self.nombre_archivo}: {str(e)}")
+            raise
 
     def update(self):
-
-
+        """Update file with retry logic"""
         try:
-            logging.info(f"Actualizando {self.nombre_archivo}")
-            print(f"Actualizando {self.nombre_archivo}")
-            print(self.file_conn.RefreshAll())
-
-
-            time.sleep(50)
-
-            logging.info(f"Guardando {self.nombre_archivo}")
-            self.file_conn.Save()  # Guarda los cambios
-
-        except pythoncom.com_error as e:
-            print(f"Error al actualizar el archivo: {e}")
-            logging.info(f"Error al actualizar el archivo: {e}")
+            logging.info(f"Updating {self.nombre_archivo}")
+            self.file_conn.RefreshAll()
+            time.sleep(50)  # Wait for refresh to complete
+            logging.info(f"Saving {self.nombre_archivo}")
+            self.file_conn.Save()
+        except Exception as e:
+            logging.error(f"Error updating file {self.nombre_archivo}: {str(e)}")
+            raise FileOperationError(f"Error updating file: {str(e)}")
 
     def relocate(self, newpath):
-        """Guarda una copia del archivo actualizado en otra ubicación."""
+        """Save updated file to new location with error handling"""
         try:
             fecha_hoy = datetime.datetime.now().strftime("%Y%m%d")
-            nombre_nuevo = f"Cartera_{fecha_hoy}.xlsx"
+            nombre_nuevo = f"Cartera_de_cliente_{fecha_hoy}.xlsx"
             ruta_destino = os.path.join(newpath, nombre_nuevo)
 
-            self.file_conn.SaveAs(ruta_destino)  # Guarda el archivo en la nueva ubicación
-            print(f"Reporte actualizado y guardado en: {ruta_destino}")
-            logging.info(f"Reporte actualizado en {ruta_destino}")
-        except pythoncom.com_error as e:
-            print(f"Error al mover el archivo: {e}")
-            logging.info(f"Error al mover el archivo: {e}")
+            self.file_conn.SaveAs(ruta_destino)
+            logging.info(f"File saved to: {ruta_destino}")
+        except Exception as e:
+            logging.error(f"Error relocating file {self.nombre_archivo}: {str(e)}")
+            raise FileOperationError(f"Error relocating file: {str(e)}")
 
     def __str__(self):
         return f'{self.nombre_archivo} - {self.fecha_archivo}'
