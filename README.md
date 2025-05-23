@@ -1,4 +1,4 @@
-# Portfolio Automation System
+# FileSync Automation
 
 A Python-based automation system for managing and synchronizing business-critical files across multiple storage locations. Provides automated file processing, scheduled updates, and ensures data consistency.
 
